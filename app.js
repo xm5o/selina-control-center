@@ -142,15 +142,51 @@
         $('backendUrl').value
       );
 
+      if (!/^https:\/\//i.test(state.base)) {
+        throw new Error('Use the new https://*.trycloudflare.com backend URL.');
+      }
+
       localStorage.setItem(
         'selinaDashboardBase',
         state.base
       );
 
+      // A new Quick Tunnel means old OAuth state/session data is useless.
+      sessionStorage.removeItem('selinaOAuthState');
+      localStorage.removeItem('selinaDashboardToken');
+
+      let configResponse;
+      try {
+        configResponse = await fetch(
+          `${state.base}/api/oauth/config`,
+          { cache: 'no-store' }
+        );
+      } catch {
+        throw new Error(
+          'Cannot reach the Selina backend. Check that the new Cloudflare URL is correct and the tunnel is still running.'
+        );
+      }
+
+      const config = await configResponse.json().catch(() => ({}));
+
+      if (!configResponse.ok) {
+        throw new Error(
+          config.error ||
+          `Backend returned HTTP ${configResponse.status}`
+        );
+      }
+
+      if (!config.enabled) {
+        throw new Error(
+          'Discord OAuth is not configured on the backend.'
+        );
+      }
+
       const response = await fetch(
         `${state.base}/api/oauth/start`,
         {
           method: 'POST',
+          cache: 'no-store',
           headers: {
             'Content-Type':
               'application/json'
@@ -160,12 +196,12 @@
       );
 
       const payload =
-        await response.json();
+        await response.json().catch(() => ({}));
 
       if (!response.ok) {
         throw new Error(
           payload.error ||
-          'Discord login is not configured'
+          `Discord login start failed (${response.status})`
         );
       }
 
@@ -235,20 +271,27 @@
     state.base = savedBase;
 
     try {
-      const response = await fetch(
-        `${state.base}/api/oauth/exchange`,
-        {
-          method: 'POST',
+      let response;
+      try {
+        response = await fetch(
+          `${state.base}/api/oauth/exchange`,
+          {
+            method: 'POST',
           headers: {
             'Content-Type':
               'application/json'
           },
-          body: JSON.stringify({
-            code,
-            state: stateParam
-          })
-        }
-      );
+            body: JSON.stringify({
+              code,
+              state: stateParam
+            })
+          }
+        );
+      } catch {
+        throw new Error(
+          'Lost connection to the Cloudflare backend during Discord login. Copy the latest tunnel URL and try again.'
+        );
+      }
 
       const payload =
         await response.json();
@@ -382,7 +425,7 @@
 
   async function refreshActivity(){try{const x=await api('/api/logs?limit=160');state.events=x.events||[];renderActivity();setLive(true)}catch{setLive(false)}}
   function setLive(x){$('liveDot').classList.toggle('live',x);$('connectionText').textContent=x?'Live':'Reconnecting'}
-  async function refreshAll(){try{const days=state.analyticsDays||30;const [overview,music,guilds,system,logs,commands,diagnostics,summary,daily,health,capabilities,audit,levelSummary,voiceSessions]=await Promise.all([api('/api/overview'),api('/api/music'),api('/api/guilds'),api('/api/system'),api('/api/logs?limit=160'),api(`/api/analytics/commands?days=${days}`),api(`/api/diagnostics?days=${days}`),api(`/api/analytics/summary?days=${days}`),api(`/api/analytics/daily?days=${days}`),api(`/api/analytics/health?days=${Math.min(days,30)}`),api('/api/controls/capabilities'),api('/api/audit?limit=60'),api('/api/levels/summary'),api('/api/levels/voice-sessions')]);Object.assign(state,{overview,music,guilds:guilds.guilds||[],system,events:logs.events||[],commands,diagnostics,summary,daily,health,capabilities,audit,levelSummary,voiceSessions});render();loadNotifications().catch(()=>{});setLive(true)}catch(e){console.warn('[Dashboard]',e);setLive(false)}}
+  async function refreshAll(){try{const days=state.analyticsDays||30;const [overview,music,guilds,system,logs,commands,diagnostics,summary,daily,health,capabilities,audit,levelSummary,voiceSessions]=await Promise.all([api('/api/overview'),api('/api/music'),api('/api/guilds'),api('/api/system'),api('/api/logs?limit=160'),api(`/api/analytics/commands?days=${days}`),api(`/api/diagnostics?days=${days}`),api(`/api/analytics/summary?days=${days}`),api(`/api/analytics/daily?days=${days}`),api(`/api/analytics/health?days=${Math.min(days,30)}`),api('/api/controls/capabilities'),api('/api/audit?limit=60'),api('/api/levels/summary'),api('/api/levels/voice-sessions')]);Object.assign(state,{overview,music,guilds:guilds.guilds||[],system,events:logs.events||[],commands,diagnostics,summary,daily,health,capabilities,audit,levelSummary,voiceSessions});render();setLive(true)}catch(e){console.warn('[Dashboard]',e);setLive(false)}}
   function render(){const o=state.overview;if(!o)return;$('botName').textContent=o.bot.username||'Selina';$('botState').textContent=o.bot.ready?'Online':'Offline';$('botAvatar').src=o.bot.avatar||'';$('metricUptime').textContent=duration(o.bot.uptime);$('metricPing').textContent=o.bot.ping==null?'—':`${Math.round(o.bot.ping)}ms`;$('metricGuilds').textContent=o.discord.guilds;$('metricMemory').textContent=bytes(o.process.rss);$('runtimeNode').textContent=o.process.node;$('runtimeCommands').textContent=o.discord.commands;$('runtimeUsers').textContent=o.discord.cachedUsers;$('runtimeMusic').textContent=o.music.engine||'Ready';renderMusic();renderGuilds();renderSystem();renderActivity();renderCommands();renderDiagnostics();renderHistory();renderTrends();renderControls();renderLevels()}
   function renderMusic(){const qs=state.music?.queues||[],q=qs[0];if(!q){$('musicBadge').textContent='Idle';$('musicTitle').textContent='Nothing playing';$('musicServer').textContent='Selina is idle';$('musicArtwork').removeAttribute('src');$('musicProgress').style.width='0%';$('musicCurrent').textContent='0:00';$('musicDuration').textContent='0:00'}else{$('musicBadge').textContent=q.paused?'Paused':'Playing';$('musicTitle').textContent=q.song.name;$('musicServer').textContent=`${q.guildName}${q.voiceChannel?' · '+q.voiceChannel:''}`;$('musicArtwork').src=q.song.thumbnail||'';const t=+q.song.duration||0,c=+q.currentTime||0;$('musicProgress').style.width=t?`${Math.min(100,c/t*100)}%`:'0%';$('musicCurrent').textContent=clock(c);$('musicDuration').textContent=q.song.formattedDuration||clock(t)}$('musicQueues').innerHTML=qs.length?qs.map(q=>`<article class="card"><div class="cardtop"><img src="${escapeHtml(q.song.thumbnail||'')}"><div><h3>${escapeHtml(q.song.name)}</h3><p>${escapeHtml(q.guildName)}</p></div></div><div class="stats"><div><span>Status</span><b>${q.paused?'Paused':'Playing'}</b></div><div><span>Volume</span><b>${q.volume}%</b></div><div><span>Queue</span><b>${q.queueSize}</b></div></div></article>`).join(''):'<article class="card"><h3>No active queues</h3><p>Selina is idle.</p></article>'}
   function renderGuilds(){$('guildGrid').innerHTML=state.guilds.map(g=>`<article class="card" data-guild="${g.id}"><div class="cardtop"><img src="${escapeHtml(g.icon||'')}"><div><h3>${escapeHtml(g.name)}</h3><p>${g.members.toLocaleString()} members</p></div></div><div class="stats"><div><span>Members</span><b>${g.members}</b></div><div><span>Channels</span><b>${g.channels}</b></div><div><span>Roles</span><b>${g.roles}</b></div></div></article>`).join('');document.querySelectorAll('[data-guild]').forEach(e=>e.onclick=()=>openGuild(e.dataset.guild))}
@@ -423,7 +466,7 @@
   async function loadLevelGuild(){const id=$('levelGuild').value;if(!id)return;try{const [board,config,sessions]=await Promise.all([api(`/api/levels/leaderboard/${id}?sort=${state.levelSort||'xp'}&limit=25`),api(`/api/levels/config/${id}`),api(`/api/levels/voice-sessions?guildId=${id}`)]);state.levelBoard=board;state.levelConfig=config;state.levelGuildSessions=sessions;renderLevelGuild()}catch(e){$('levelLeaderboard').innerHTML=`<p class="muted">${escapeHtml(e.message)}</p>`}}
   function renderLevels(){const s=state.levelSummary||{};$('levelSummary').innerHTML=`<article><span>Tracked members</span><b>${(s.users||0).toLocaleString()}</b><small>Level database</small></article><article><span>Total XP</span><b>${(s.totalXp||0).toLocaleString()}</b><small>All servers</small></article><article><span>Messages</span><b>${(s.messages||0).toLocaleString()}</b><small>XP-counted</small></article><article><span>Voice time</span><b>${formatVoice(s.voiceSeconds||0)}</b><small>${s.activeVoice||0} live sessions</small></article>`;const select=$('levelGuild'),before=select.value;select.innerHTML=(state.guilds||[]).map(g=>`<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');if(before&&state.guilds.some(g=>g.id===before))select.value=before;if(!state.levelBoard||state.levelBoard.guildId!==select.value)loadLevelGuild();else renderLevelGuild()}
   function renderLevelGuild(){const board=state.levelBoard?.users||[],sort=state.levelSort||'xp';$('levelBoardTitle').textContent=state.levelBoard?.guildName||'Top members';$('levelLeaderboard').innerHTML=board.length?board.map(u=>{const score=sort==='messages'?`${u.messages.toLocaleString()} msg`:sort==='voice'?formatVoice(u.voiceSeconds):`Lv ${u.level} · ${u.totalXp.toLocaleString()} XP`;return `<div class="levelrow" data-leveluser="${u.userId}"><span class="rank">#${u.rank}</span><img src="${escapeHtml(u.avatar||'')}"><div><b>${escapeHtml(u.displayName)}</b><small>@${escapeHtml(u.username)}</small></div><span class="score">${score}</span></div>`}).join(''):'<p class="muted">No level data for this server yet.</p>';document.querySelectorAll('[data-leveluser]').forEach(e=>e.onclick=()=>{switchView('users');openUser(e.dataset.leveluser)});const ss=state.levelGuildSessions?.sessions||[];$('voiceSessionCount').textContent=`${ss.length} active`;$('voiceSessions').innerHTML=ss.length?ss.map(v=>`<div class="levelrow"><span class="rank">●</span><img src="${escapeHtml(v.avatar||'')}"><div><b>${escapeHtml(v.displayName)}</b><small>${escapeHtml(v.channelName)}</small></div><span class="score">${formatVoice(v.sessionSeconds)}</span></div>`).join(''):'<p class="muted">Nobody is being tracked in voice right now.</p>';const c=state.levelConfig?.config;if(!c){$('levelConfig').innerHTML='<div><span>Status</span><b>Not configured</b></div>';return}$('levelConfig').innerHTML=`<div><span>Leveling</span><b>${c.leveling_enabled?'Enabled':'Disabled'}</b></div><div><span>Voice XP</span><b>${c.voice_xp_enabled?'Enabled':'Disabled'}</b></div><div><span>Message XP</span><b>${c.xp_min||15}–${c.xp_max||25}</b></div><div><span>Cooldown</span><b>${Math.round((c.xp_cooldown||60000)/1000)}s</b></div><div><span>Level factor</span><b>${c.level_factor||100}</b></div><div><span>Voice award</span><b>${c.voice_xp_amount||10} XP</b></div><div><span>Voice interval</span><b>${Math.round((c.voice_xp_interval||60000)/1000)}s</b></div><div><span>Booster</span><b>${c.booster_multiplier||1.5}×</b></div>`}
-  async function loadCenter(view){try{if(view==='commandcenter'){state.cc=await api(`/api/centers/commands?days=${state.analyticsDays||30}`);renderCommandCenter()}if(view==='aicenter'){state.aiCenter=await api(`/api/centers/ai?days=${state.analyticsDays||30}`);renderAiCenter()}if(view==='modcenter'){state.modCenter=await api('/api/centers/moderation');renderModCenter()}if(view==='musicpro'){state.musicPro=await api('/api/centers/music');renderMusicPro()}if(view==='console'&&!state.consolePaused){await loadConsole()}if(view==='notifications'){await loadNotifications()}if(view==='timeline'){await loadTimeline()}if(view==='incidents'){await loadIncidents()}if(view==='database'){await loadDatabase()}if(view==='backups'){await loadBackups()}}catch(e){toast(e.message,true)}}
+  async function loadCenter(view){try{if(view==='commandcenter'){state.cc=await api(`/api/centers/commands?days=${state.analyticsDays||30}`);renderCommandCenter()}if(view==='aicenter'){state.aiCenter=await api(`/api/centers/ai?days=${state.analyticsDays||30}`);renderAiCenter()}if(view==='modcenter'){state.modCenter=await api('/api/centers/moderation');renderModCenter()}if(view==='musicpro'){state.musicPro=await api('/api/centers/music');renderMusicPro()}if(view==='console'&&!state.consolePaused){await loadConsole()}}catch(e){toast(e.message,true)}}
   function feedHtml(events,empty='No activity yet.'){return events?.length?events.map(e=>`<div class="event"><i></i><span class="type">${escapeHtml(e.command||e.action||e.level||e.type||'EVENT')}</span><span>${escapeHtml(eventMessage(e))}</span><time>${ago(e.at)}</time></div>`).join(''):`<div class="event"><i></i><span class="type">QUIET</span><span>${empty}</span></div>`}
   function renderCommandCenter(){const d=state.cc||{},uses=(d.commands||[]).reduce((s,x)=>s+(x.uses||0),0);$('ccMetrics').innerHTML=`<article><span>Loaded</span><b>${(d.loaded||[]).length}</b><small>Slash commands</small></article><article><span>Uses</span><b>${uses.toLocaleString()}</b><small>${d.days||30}-day analytics</small></article><article><span>Recent</span><b>${(d.recent||[]).length}</b><small>Telemetry window</small></article><article><span>Errors</span><b>${(d.errors||[]).length}</b><small>Recent runtime</small></article>`;$('ccUsage').innerHTML=(d.commands||[]).slice(0,30).map((x,i)=>`<div class="table-row"><span>#${i+1}</span><b>/${escapeHtml(x.command)}</b><span>${x.uses||0} uses</span></div>`).join('')||'<p class="muted">No command analytics yet.</p>';$('ccRecent').innerHTML=feedHtml(d.recent,'No commands executed recently.');$('ccLoaded').innerHTML=(d.loaded||[]).map(c=>`<div class="command-card"><b>/${escapeHtml(c.name)}</b><small>${escapeHtml(c.description||'No description')}</small></div>`).join('')}
   function renderAiCenter(){const d=state.aiCenter||{};$('aiMetrics').innerHTML=`<article><span>Requests</span><b>${d.requests||0}</b><small>${d.days||30}-day window</small></article><article><span>Errors</span><b>${d.errors||0}</b><small>AI-related telemetry</small></article><article><span>Success</span><b>${d.successRate??100}%</b><small>Approx. telemetry rate</small></article>`;$('aiRecent').innerHTML=feedHtml(d.recent,'No AI command activity in the current telemetry window.');$('aiErrors').innerHTML=feedHtml(d.recentErrors,'No recent AI errors.');$('aiNote').textContent=d.note||''}
@@ -431,23 +474,10 @@
   function renderMusicPro(){const d=state.musicPro||{},songs=(d.queues||[]).reduce((s,q)=>s+(q.songs||[]).length,0);$('musicProMetrics').innerHTML=`<article><span>Active queues</span><b>${(d.queues||[]).length}</b><small>Right now</small></article><article><span>Queued tracks</span><b>${songs}</b><small>Across servers</small></article><article><span>Music events</span><b>${(d.events||[]).length}</b><small>Telemetry window</small></article>`;$('musicProQueues').innerHTML=(d.queues||[]).map(q=>`<article class="queue-pro"><div class="head"><div><p class="eyebrow">${q.paused?'PAUSED':'PLAYING'}</p><h3>${escapeHtml(q.guildName)}</h3></div><span class="pill">${q.volume}% · Loop ${q.repeatMode}</span></div>${(q.songs||[]).map((s,i)=>`<div class="queue-song"><span>${i+1}</span><b>${escapeHtml(s.name)}</b><span>${escapeHtml(String(s.duration||''))}</span></div>`).join('')||'<p class="muted">Queue metadata unavailable.</p>'}</article>`).join('')||'<article class="panel"><p class="muted">No active music queues.</p></article>';$('musicProEvents').innerHTML=feedHtml(d.events,'No recent music telemetry.')}
   async function loadConsole(){const q=encodeURIComponent($('consoleSearch')?.value||''),level=encodeURIComponent($('consoleLevel')?.value||'');const d=await api(`/api/centers/console?limit=300&q=${q}&level=${level}`);state.consoleData=d;renderConsole()}
   function renderConsole(){const events=state.consoleData?.events||[];$('consoleOutput').innerHTML=events.length?events.map(e=>{const lvl=String(e.level||e.type||'event').toLowerCase(),msg=eventMessage(e)||JSON.stringify(e);return `<div class="console-line ${lvl.includes('error')?'error':lvl.includes('warn')?'warn':''}"><time>${new Date(e.at||Date.now()).toLocaleTimeString()}</time><span class="lvl">${escapeHtml(lvl)}</span><span>${escapeHtml(msg)}</span></div>`}).join(''):'<div class="console-line"><span></span><span class="lvl">quiet</span><span>No matching telemetry.</span></div>'}
-  async function loadNotifications(){const d=await api('/api/notifications?limit=150');state.notifications=d;renderNotifications()}
-  function renderNotifications(){const d=state.notifications||{},s=d.summary||{},items=d.notifications||[];$('notificationMetrics').innerHTML=`<article><span>Unread</span><b>${s.unread||0}</b><small>Needs attention</small></article><article><span>Critical</span><b>${s.critical||0}</b><small>Unread errors</small></article><article><span>Warnings</span><b>${s.warnings||0}</b><small>Unread warnings</small></article><article><span>Total</span><b>${s.total||0}</b><small>Notification history</small></article>`;$('notificationBadge').textContent=s.unread||0;$('notificationBadge').classList.toggle('hidden',!(s.unread>0));$('notificationList').innerHTML=items.length?items.map(n=>`<div class="notification-item ${n.readAt?'':'unread'} ${escapeHtml(n.severity)}"><span class="sev"></span><div><b>${escapeHtml(n.title)}</b><small>${escapeHtml(n.message)} · ${ago(n.at)}</small></div>${n.readAt?'':`<button data-readnote="${n.id}">Mark read</button>`}</div>`).join(''):'<p class="muted">No notifications yet.</p>';document.querySelectorAll('[data-readnote]').forEach(b=>b.onclick=async()=>{await apiPost(`/api/notifications/${b.dataset.readnote}/read`,{read:true});await loadNotifications()})}
-  async function loadTimeline(){const type=$('timelineType')?.value||'';state.timeline=await api(`/api/timeline?days=${state.analyticsDays||30}&limit=500&type=${encodeURIComponent(type)}`);renderTimeline()}
-  function renderTimeline(){const ev=state.timeline?.events||[];$('timelineList').innerHTML=ev.length?ev.map(e=>`<div class="timeline-item"><time>${new Date(e.at||Date.now()).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</time><span class="kind">${escapeHtml(e.type||'event')}</span><span>${escapeHtml(eventMessage(e))}</span></div>`).join(''):'<p class="muted">No timeline events for this filter.</p>'}
-  async function loadIncidents(){state.incidents=await api(`/api/incidents?days=${state.analyticsDays||30}`);renderIncidents()}
-  function renderIncidents(){const d=state.incidents||{},s=d.summary||{},h=d.health||[];$('incidentMetrics').innerHTML=`<article><span>Incidents</span><b>${s.incidents||0}</b><small>${d.days||30}-day window</small></article><article><span>Errors</span><b>${s.errors||0}</b><small>Runtime errors</small></article><article><span>Avg ping</span><b>${d.avgPing||0}ms</b><small>Health samples</small></article><article><span>Peak RAM</span><b>${bytes(d.peakRss||0)}</b><small>Process RSS</small></article>`;const max=Math.max(1,...h.map(x=>Number(x.rss)||0));$('incidentHealth').innerHTML=h.slice(-160).map(x=>`<i class="health-bar" title="${new Date(x.at).toLocaleString()} · ${bytes(x.rss)} · ${Math.round(x.ping||0)}ms" style="height:${Math.max(3,(Number(x.rss)||0)/max*100)}%"></i>`).join('')||'<p class="muted">Health history begins after persistent analytics was enabled.</p>';$('incidentList').innerHTML=feedHtml(d.recent,'No incidents in this period.')}
-  async function loadDatabase(){const table=$('dbTable')?.value||'users',q=encodeURIComponent($('dbSearch')?.value||'');state.dbExplorer=await api(`/api/database/explorer?table=${table}&q=${q}&limit=150`);renderDatabase()}
-  function renderDatabase(){const d=state.dbExplorer||{},cols=d.columns||[],rows=d.rows||[];$('dbExplorer').innerHTML=`<thead><tr>${cols.map(c=>`<th>${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${cols.map(c=>`<td title="${escapeHtml(String(r[c]??''))}">${escapeHtml(String(r[c]??''))}</td>`).join('')}</tr>`).join('')}</tbody>`}
-  async function loadBackups(){state.backups=await api('/api/backups');renderBackups()}
-  function renderBackups(){const d=state.backups||{};$('backupSources').innerHTML=(d.sources||[]).map(s=>`<span class="chip">${escapeHtml(s)}</span>`).join('');$('backupHistory').innerHTML=(d.history||[]).length?d.history.map(b=>`<div class="backup-item"><div><b>${escapeHtml(b.filename)}</b><small>${new Date(b.at).toLocaleString()} · ${bytes(b.bytes)} · ${b.files} files · SHA ${escapeHtml(String(b.sha256).slice(0,12))}…</small></div><a href="${state.base}/api/backups/${encodeURIComponent(b.filename)}/download" data-backupdownload="${escapeHtml(b.filename)}">Download</a></div>`).join(''):'<p class="muted">No backups created from the dashboard yet.</p>';document.querySelectorAll('[data-backupdownload]').forEach(a=>a.onclick=async e=>{e.preventDefault();try{const r=await fetch(a.href,{headers:{Authorization:`Bearer ${state.token}`}});if(!r.ok)throw new Error('Backup download failed');const blob=await r.blob(),url=URL.createObjectURL(blob),x=document.createElement('a');x.href=url;x.download=a.dataset.backupdownload;document.body.appendChild(x);x.click();x.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}catch(err){toast(err.message,true)}})}
-  async function loadGlobalSearch(){const q=$('globalSearchInput').value.trim();if(!q){$('globalSearchResults').innerHTML='<p class="muted">Start typing to search Selina.</p>';return}const d=await api(`/api/global-search?q=${encodeURIComponent(q)}`);$('globalSearchResults').innerHTML=(d.results||[]).map(r=>`<div class="global-result" data-searchkind="${r.kind}" data-searchid="${r.id}" data-searchguild="${r.guildId||''}"><span class="kind">${escapeHtml(r.kind)}</span><div><b>${escapeHtml(r.title)}</b><small>${escapeHtml(r.subtitle||'')}</small></div></div>`).join('')||'<p class="muted">Nothing found.</p>';document.querySelectorAll('[data-searchkind]').forEach(x=>x.onclick=()=>openSearchResult(x))}
-  function openSearchResult(x){$('globalSearchModal').classList.add('hidden');const k=x.dataset.searchkind,id=x.dataset.searchid;if(k==='server'){switchView('servers');openGuild(id)}else if(k==='user'){switchView('users');openUser(id)}else if(k==='command'){switchView('commandcenter')}else if(k==='channel'){switchView('servers');openGuild(x.dataset.searchguild)}}
-  function switchView(v){document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('active',b.dataset.view===v));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===`view-${v}`));$('pageTitle').textContent=({overview:'Overview',servers:'Server Manager',users:'Users',levels:'Levels & Voice',commands:'Commands',activity:'Activity',music:'Music',controls:'Controls',trends:'Trends',diagnostics:'Diagnostics',system:'Runtime',notifications:'Notifications',timeline:'Timeline',incidents:'Incidents',database:'Database Explorer',backups:'Backups'})[v]||'Selina'}
+  function switchView(v){document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('active',b.dataset.view===v));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===`view-${v}`));$('pageTitle').textContent=({overview:'Overview',servers:'Server Manager',users:'Users',levels:'Levels & Voice',commands:'Commands',activity:'Activity',music:'Music',controls:'Controls',trends:'Trends',diagnostics:'Diagnostics',system:'Runtime'})[v]||'Selina'}
   document.querySelectorAll('.nav').forEach(b=>b.onclick=()=>switchView(b.dataset.view));document.querySelectorAll('.filter').forEach(b=>b.onclick=()=>{state.filter=b.dataset.filter;document.querySelectorAll('.filter').forEach(x=>x.classList.toggle('active',x===b));renderActivity()});
   $('savePresence').addEventListener('click',updatePresence);$('reloadCommands').addEventListener('click',reloadCommands);$('restartSelina').addEventListener('click',restartSelina);
   $('levelGuild').addEventListener('change',loadLevelGuild);document.querySelectorAll('[data-levelsort]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-levelsort]').forEach(x=>x.classList.remove('active'));b.classList.add('active');state.levelSort=b.dataset.levelsort;loadLevelGuild()});
-  $('markAllRead').addEventListener('click',async()=>{await apiPost('/api/notifications/read-all',{});await loadNotifications()});$('timelineRefresh').addEventListener('click',()=>loadTimeline().catch(e=>toast(e.message,true)));$('timelineType').addEventListener('change',()=>loadTimeline().catch(e=>toast(e.message,true)));$('dbRefresh').addEventListener('click',()=>loadDatabase().catch(e=>toast(e.message,true)));$('dbTable').addEventListener('change',()=>loadDatabase().catch(e=>toast(e.message,true)));$('dbSearch').addEventListener('keydown',e=>{if(e.key==='Enter')loadDatabase().catch(x=>toast(x.message,true))});$('createBackup').addEventListener('click',async()=>{if(!await confirmAction('Create Selina backup?','This creates a private server-side snapshot that you can download afterward.'))return;try{await apiPost('/api/backups/create',{confirm:true});toast('Backup created');await loadBackups();await loadNotifications()}catch(e){toast(e.message,true)}});$('globalSearchOpen').addEventListener('click',()=>{$('globalSearchModal').classList.remove('hidden');$('globalSearchInput').focus()});$('globalSearchClose').addEventListener('click',()=>$('globalSearchModal').classList.add('hidden'));$('globalSearchModal').addEventListener('click',e=>{if(e.target===$('globalSearchModal'))$('globalSearchModal').classList.add('hidden')});let searchTimer;$('globalSearchInput').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>loadGlobalSearch().catch(()=>{}),180)});document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('globalSearchModal').classList.remove('hidden');$('globalSearchInput').focus()}if(e.key==='Escape')$('globalSearchModal').classList.add('hidden')});
   $('consoleRefresh').addEventListener('click',()=>loadConsole().catch(e=>toast(e.message,true)));$('consoleSearch').addEventListener('keydown',e=>{if(e.key==='Enter')loadConsole().catch(x=>toast(x.message,true))});$('consoleLevel').addEventListener('change',()=>loadConsole().catch(e=>toast(e.message,true)));$('consolePause').addEventListener('click',()=>{state.consolePaused=!state.consolePaused;$('consolePause').textContent=state.consolePaused?'Resume':'Pause';if(!state.consolePaused)loadConsole().catch(()=>{})});
   $('userSearchButton').addEventListener('click',searchUsers);$('userSearch').addEventListener('keydown',e=>{if(e.key==='Enter')searchUsers()});document.querySelectorAll('.rangebtn').forEach(b=>b.onclick=async()=>{state.analyticsDays=Number(b.dataset.days)||30;document.querySelectorAll('.rangebtn').forEach(x=>x.classList.toggle('active',x===b));await refreshAll()});
   $('discordLoginButton').addEventListener('click',startDiscordLogin);$('connectButton').addEventListener('click',connect);$('ownerKey').addEventListener('keydown',e=>{if(e.key==='Enter')connect()});$('disconnectButton').addEventListener('click',()=>disconnect(true));
