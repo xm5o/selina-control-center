@@ -23,14 +23,19 @@
         <input id="backendUrl" autocomplete="url" placeholder="https://your-selina-api.example" />
       </label>
 
-      <label>
-        Owner key
-        <input id="ownerKey" type="password" placeholder="Paste the key from Selina's console" />
-      </label>
+      <button id="discordLoginButton" class="primary-button">Continue with Discord</button>
 
-      <button id="connectButton" class="primary-button">Connect</button>
+      <details class="legacy-login">
+        <summary>Temporary owner-key login</summary>
+        <label>
+          Owner key
+          <input id="ownerKey" type="password" placeholder="Owner key" />
+        </label>
+        <button id="connectButton" class="secondary-button">Connect with key</button>
+      </details>
+
       <p id="connectError" class="form-error"></p>
-      <p class="micro">If this page is served directly by Selina, leave Backend URL empty.</p>
+      <p class="micro">Only your Discord account will be accepted.</p>
     </div>
   </div>
 

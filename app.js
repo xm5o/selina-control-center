@@ -111,6 +111,187 @@
     return response.json();
   }
 
+  async function startDiscordLogin() {
+    $('connectError').textContent = '';
+
+    try {
+      state.base = baseUrl(
+        $('backendUrl').value
+      );
+
+      localStorage.setItem(
+        'selinaDashboardBase',
+        state.base
+      );
+
+      const response = await fetch(
+        `${state.base}/api/oauth/start`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type':
+              'application/json'
+          },
+          body: '{}'
+        }
+      );
+
+      const payload =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          payload.error ||
+          'Discord login is not configured'
+        );
+      }
+
+      sessionStorage.setItem(
+        'selinaOAuthState',
+        payload.state
+      );
+
+      location.href =
+        payload.authorizeUrl;
+    } catch (error) {
+      $('connectError').textContent =
+        error.message ||
+        'Discord login failed';
+    }
+  }
+
+  async function finishDiscordLogin() {
+    const params =
+      new URLSearchParams(
+        location.search
+      );
+
+    const code =
+      params.get('code');
+
+    const stateParam =
+      params.get('state');
+
+    if (!code || !stateParam) {
+      return false;
+    }
+
+    const savedState =
+      sessionStorage.getItem(
+        'selinaOAuthState'
+      );
+
+    if (
+      !savedState ||
+      savedState !== stateParam
+    ) {
+      history.replaceState(
+        {},
+        document.title,
+        location.pathname
+      );
+
+      $('connectError').textContent =
+        'Discord login state did not match. Try again.';
+
+      return true;
+    }
+
+    const savedBase =
+      localStorage.getItem(
+        'selinaDashboardBase'
+      );
+
+    if (!savedBase) {
+      $('connectError').textContent =
+        'Backend URL was lost. Enter it again.';
+
+      return true;
+    }
+
+    state.base = savedBase;
+
+    try {
+      const response = await fetch(
+        `${state.base}/api/oauth/exchange`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type':
+              'application/json'
+          },
+          body: JSON.stringify({
+            code,
+            state: stateParam
+          })
+        }
+      );
+
+      const payload =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          payload.error ||
+          'Discord login failed'
+        );
+      }
+
+      state.token =
+        payload.token;
+
+      localStorage.setItem(
+        'selinaDashboardToken',
+        state.token
+      );
+
+      sessionStorage.removeItem(
+        'selinaOAuthState'
+      );
+
+      history.replaceState(
+        {},
+        document.title,
+        location.pathname
+      );
+
+      $('connectScreen')
+        .classList.add('hidden');
+
+      $('app')
+        .classList.remove('hidden');
+
+      await refreshAll();
+      setLive(true);
+
+      state.refreshTimer =
+        setInterval(
+          refreshAll,
+          5000
+        );
+
+      state.activityTimer =
+        setInterval(
+          refreshActivity,
+          2000
+        );
+
+      return true;
+    } catch (error) {
+      history.replaceState(
+        {},
+        document.title,
+        location.pathname
+      );
+
+      $('connectError').textContent =
+        error.message ||
+        'Discord login failed';
+
+      return true;
+    }
+  }
+
   async function connect() {
     $('connectError').textContent = '';
     $('connectButton').disabled = true;
@@ -387,6 +568,11 @@
     });
   });
 
+  $('discordLoginButton').addEventListener(
+    'click',
+    startDiscordLogin
+  );
+
   $('connectButton').addEventListener('click', connect);
   $('ownerKey').addEventListener('keydown', event => {
     if (event.key === 'Enter') connect();
@@ -398,5 +584,12 @@
     $('backendUrl').value = savedBase;
   }
 
-  resumeSession();
+  (async () => {
+    const handledOAuth =
+      await finishDiscordLogin();
+
+    if (!handledOAuth) {
+      await resumeSession();
+    }
+  })();
 })();
