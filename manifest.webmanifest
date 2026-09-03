@@ -5,5 +5,10 @@
   "display": "standalone",
   "background_color": "#09090b",
   "theme_color": "#09090b",
-  "description": "Private Selina Discord bot control center"
+  "description": "Private Selina Discord bot control center",
+  "orientation": "any",
+  "categories": [
+    "utilities",
+    "developer"
+  ]
 }
