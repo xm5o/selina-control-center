@@ -1,180 +1,27 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0b0b0d" />
-  <meta name="color-scheme" content="dark" />
-  <title>Selina Control Center</title>
-  <link rel="stylesheet" href="./styles.css" />
-</head>
-<body>
-  <div class="noise"></div>
-
-  <div id="connectScreen" class="connect-screen">
-    <div class="connect-card">
-      <div class="brand-mark">S</div>
-      <p class="eyebrow">SELINA</p>
-      <h1>Control Center</h1>
-      <p class="muted">Private dashboard. Connect it to your Selina backend.</p>
-
-      <label>
-        Backend URL
-        <input id="backendUrl" autocomplete="url" placeholder="https://your-selina-api.example" />
-      </label>
-
-      <button id="discordLoginButton" class="primary-button">Continue with Discord</button>
-
-      <details class="legacy-login">
-        <summary>Temporary owner-key login</summary>
-        <label>
-          Owner key
-          <input id="ownerKey" type="password" placeholder="Owner key" />
-        </label>
-        <button id="connectButton" class="secondary-button">Connect with key</button>
-      </details>
-
-      <p id="connectError" class="form-error"></p>
-      <p class="micro">Only your Discord account will be accepted.</p>
-    </div>
-  </div>
-
-  <div id="app" class="app hidden">
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-mark small">S</div>
-        <div>
-          <strong>Selina</strong>
-          <span>Control Center</span>
-        </div>
-      </div>
-
-      <nav class="nav">
-        <button class="nav-item active" data-view="overview">Overview</button>
-        <button class="nav-item" data-view="music">Music</button>
-        <button class="nav-item" data-view="servers">Servers</button>
-        <button class="nav-item" data-view="activity">Activity</button>
-        <button class="nav-item" data-view="system">System</button>
-      </nav>
-
-      <div class="sidebar-footer">
-        <div class="connection-line">
-          <span id="liveDot" class="status-dot"></span>
-          <span id="connectionText">Connecting</span>
-        </div>
-        <button id="disconnectButton" class="ghost-button">Disconnect</button>
-      </div>
-    </aside>
-
-    <main class="main">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">PRIVATE DASHBOARD</p>
-          <h2 id="pageTitle">Overview</h2>
-        </div>
-
-        <div class="bot-chip">
-          <img id="botAvatar" alt="" />
-          <div>
-            <strong id="botName">Selina</strong>
-            <span id="botState">Offline</span>
-          </div>
-        </div>
-      </header>
-
-      <section id="view-overview" class="view active">
-        <div class="hero">
-          <div>
-            <p class="eyebrow">LIVE</p>
-            <h1>Everything Selina,<br />in one place.</h1>
-            <p class="muted">Runtime, Discord, music and activity — updating while you watch.</p>
-          </div>
-          <div class="hero-orb"><span></span></div>
-        </div>
-
-        <div class="metric-grid">
-          <article class="metric-card"><span>Uptime</span><strong id="metricUptime">—</strong><small>Current process</small></article>
-          <article class="metric-card"><span>Ping</span><strong id="metricPing">—</strong><small>Discord gateway</small></article>
-          <article class="metric-card"><span>Servers</span><strong id="metricGuilds">—</strong><small>Connected guilds</small></article>
-          <article class="metric-card"><span>Memory</span><strong id="metricMemory">—</strong><small>Process RSS</small></article>
-        </div>
-
-        <div class="split-grid">
-          <article class="panel">
-            <div class="panel-head">
-              <div><p class="eyebrow">MUSIC</p><h3>Now playing</h3></div>
-              <span id="musicBadge" class="badge">Idle</span>
-            </div>
-
-            <div id="nowPlaying" class="now-playing empty">
-              <div class="artwork-shell"><img id="musicArtwork" alt="" /></div>
-              <div class="track-info">
-                <strong id="musicTitle">Nothing playing</strong>
-                <span id="musicServer">Selina is idle</span>
-                <div class="progress-track"><div id="musicProgress" class="progress-value"></div></div>
-                <div class="progress-meta"><span id="musicCurrent">0:00</span><span id="musicDuration">0:00</span></div>
-              </div>
-            </div>
-          </article>
-
-          <article class="panel">
-            <div class="panel-head">
-              <div><p class="eyebrow">RUNTIME</p><h3>Process</h3></div>
-              <span class="badge good">Healthy</span>
-            </div>
-
-            <div class="runtime-list">
-              <div><span>Node</span><strong id="runtimeNode">—</strong></div>
-              <div><span>Commands</span><strong id="runtimeCommands">—</strong></div>
-              <div><span>Cached users</span><strong id="runtimeUsers">—</strong></div>
-              <div><span>Music engine</span><strong id="runtimeMusic">—</strong></div>
-            </div>
-          </article>
-        </div>
-
-        <article class="panel activity-panel">
-          <div class="panel-head">
-            <div><p class="eyebrow">RECENT</p><h3>Activity</h3></div>
-            <span class="live-label"><i></i> Live</span>
-          </div>
-          <div id="overviewActivity" class="activity-list"></div>
-        </article>
-      </section>
-
-      <section id="view-music" class="view">
-        <div class="section-intro"><p class="eyebrow">MUSIC</p><h1>Playback</h1><p class="muted">Every active queue and current playback state.</p></div>
-        <div id="musicQueues" class="card-grid"></div>
-      </section>
-
-      <section id="view-servers" class="view">
-        <div class="section-intro"><p class="eyebrow">DISCORD</p><h1>Servers</h1><p class="muted">Guilds Selina is currently connected to.</p></div>
-        <div id="guildGrid" class="card-grid"></div>
-      </section>
-
-      <section id="view-activity" class="view">
-        <div class="section-intro"><p class="eyebrow">TELEMETRY</p><h1>Live activity</h1><p class="muted">Commands, music, voice, system and Selina logs.</p></div>
-        <div class="filter-row">
-          <button class="filter active" data-filter="all">All</button>
-          <button class="filter" data-filter="command">Commands</button>
-          <button class="filter" data-filter="music">Music</button>
-          <button class="filter" data-filter="voice">Voice</button>
-          <button class="filter" data-filter="log">Logs</button>
-        </div>
-        <article class="panel"><div id="fullActivity" class="activity-list large"></div></article>
-      </section>
-
-      <section id="view-system" class="view">
-        <div class="section-intro"><p class="eyebrow">HOST</p><h1>System</h1><p class="muted">A clean view of the process and container runtime.</p></div>
-        <div class="metric-grid">
-          <article class="metric-card"><span>Node</span><strong id="sysNode">—</strong><small>Runtime</small></article>
-          <article class="metric-card"><span>Platform</span><strong id="sysPlatform">—</strong><small id="sysArch">—</small></article>
-          <article class="metric-card"><span>RAM</span><strong id="sysRam">—</strong><small>Process RSS</small></article>
-          <article class="metric-card"><span>Disk free</span><strong id="sysDisk">—</strong><small>Container filesystem</small></article>
-        </div>
-      </section>
-    </main>
-  </div>
-
-  <script src="./app.js"></script>
-</body>
-</html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#09090b"><meta name="color-scheme" content="dark">
+<title>Selina Control Center</title><link rel="stylesheet" href="./styles.css">
+</head><body><div class="ambient"></div>
+<div id="connectScreen" class="login"><div class="login-card"><div class="logo">S</div><p class="eyebrow">SELINA PRIVATE</p><h1>Control Center</h1><p class="muted">Your private window into everything Selina.</p>
+<label>Backend URL<input id="backendUrl" autocomplete="url" placeholder="https://...trycloudflare.com"></label>
+<button id="discordLoginButton" class="primary">Continue with Discord</button>
+<details><summary>Owner-key fallback</summary><label>Owner key<input id="ownerKey" type="password"></label><button id="connectButton" class="secondary">Connect</button></details>
+<p id="connectError" class="error"></p></div></div>
+<div id="app" class="shell hidden"><aside><div class="brand"><div class="logo small">S</div><div><b>Selina</b><small>Control Center</small></div></div>
+<nav><button class="nav active" data-view="overview">⌂<span>Overview</span></button><p>DISCORD</p><button class="nav" data-view="servers">◫<span>Servers</span></button><button class="nav" data-view="commands">⌘<span>Commands</span></button><button class="nav" data-view="activity">◌<span>Activity</span></button><p>SYSTEMS</p><button class="nav" data-view="music">♪<span>Music</span></button><p>DEVELOPER</p><button class="nav" data-view="diagnostics">△<span>Diagnostics</span></button><button class="nav" data-view="system">◇<span>Runtime</span></button></nav>
+<div class="sidefoot"><span id="liveDot" class="dot"></span><span id="connectionText">Connecting</span><button id="disconnectButton">Sign out</button></div></aside>
+<main><header><div><p class="eyebrow">PRIVATE DASHBOARD</p><h2 id="pageTitle">Overview</h2></div><div class="bot"><img id="botAvatar"><div><b id="botName">Selina</b><small id="botState">Offline</small></div></div></header>
+<section id="view-overview" class="view active"><div class="hero"><div><p class="eyebrow">LIVE CONTROL CENTER</p><h1>Everything Selina.<br><em>One place.</em></h1><p class="muted">Discord, commands, music, telemetry and runtime health.</p></div><div class="orb"></div></div>
+<div class="metrics"><article><span>Uptime</span><b id="metricUptime">—</b><small>Current process</small></article><article><span>Gateway</span><b id="metricPing">—</b><small>Discord ping</small></article><article><span>Servers</span><b id="metricGuilds">—</b><small>Connected</small></article><article><span>Memory</span><b id="metricMemory">—</b><small>Process RSS</small></article></div>
+<div class="twocol"><article class="panel"><div class="head"><div><p class="eyebrow">MUSIC</p><h3>Now playing</h3></div><span id="musicBadge" class="pill">Idle</span></div><div class="playing"><img id="musicArtwork"><div><b id="musicTitle">Nothing playing</b><small id="musicServer">Selina is idle</small><div class="bar"><i id="musicProgress"></i></div><div class="times"><span id="musicCurrent">0:00</span><span id="musicDuration">0:00</span></div></div></div></article>
+<article class="panel"><div class="head"><div><p class="eyebrow">RUNTIME</p><h3>Process health</h3></div><span class="pill good">Healthy</span></div><div class="rows"><div><span>Node</span><b id="runtimeNode">—</b></div><div><span>Commands</span><b id="runtimeCommands">—</b></div><div><span>Cached users</span><b id="runtimeUsers">—</b></div><div><span>Music</span><b id="runtimeMusic">—</b></div></div></article></div>
+<article class="panel"><div class="head"><div><p class="eyebrow">RECENT</p><h3>Activity</h3></div><span class="live">● LIVE</span></div><div id="overviewActivity" class="feed"></div></article></section>
+<section id="view-servers" class="view"><div class="intro"><p class="eyebrow">DISCORD</p><h1>Server Explorer</h1><p class="muted">Tap a server to inspect its channels, roles and recent Selina activity.</p></div><div id="guildGrid" class="cards"></div><div id="guildDetail"></div></section>
+<section id="view-commands" class="view"><div class="intro"><p class="eyebrow">ANALYTICS</p><h1>Commands</h1><p class="muted">Usage captured during this Selina process.</p></div><div id="commandSummary" class="metrics triple"></div><article class="panel"><div id="commandTable" class="table"></div></article></section>
+<section id="view-activity" class="view"><div class="intro"><p class="eyebrow">TELEMETRY</p><h1>Activity</h1></div><div class="filters"><button class="filter active" data-filter="all">All</button><button class="filter" data-filter="command">Commands</button><button class="filter" data-filter="music">Music</button><button class="filter" data-filter="voice">Voice</button><button class="filter" data-filter="log">Logs</button></div><article class="panel"><div id="fullActivity" class="feed tall"></div></article></section>
+<section id="view-music" class="view"><div class="intro"><p class="eyebrow">SYSTEM</p><h1>Music</h1><p class="muted">Every active queue and playback state.</p></div><div id="musicQueues" class="cards"></div></section>
+<section id="view-diagnostics" class="view"><div class="intro"><p class="eyebrow">DEVELOPER</p><h1>Diagnostics</h1><p class="muted">Warnings and errors captured from Selina.</p></div><div id="diagnosticSummary" class="metrics triple"></div><article class="panel"><div id="diagnosticList" class="feed tall"></div></article></section>
+<section id="view-system" class="view"><div class="intro"><p class="eyebrow">HOST</p><h1>Runtime</h1></div><div class="metrics"><article><span>Node</span><b id="sysNode">—</b><small>Runtime</small></article><article><span>Platform</span><b id="sysPlatform">—</b><small id="sysArch">—</small></article><article><span>RAM</span><b id="sysRam">—</b><small>Process RSS</small></article><article><span>Disk free</span><b id="sysDisk">—</b><small>Filesystem</small></article></div></section>
+</main></div><script src="./app.js"></script></body></html>
