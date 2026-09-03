@@ -1,0 +1,9 @@
+{
+  "name": "Selina Control Center",
+  "short_name": "Selina",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "description": "Private Selina Discord bot control center"
+}
